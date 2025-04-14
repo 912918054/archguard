@@ -28,6 +28,9 @@ import org.archguard.scanner.ctl.command.ScannerCommand
 import org.archguard.scanner.ctl.impl.*
 import org.slf4j.LoggerFactory
 
+/**
+ * 客户端调用
+ */
 class AnalyserDispatcher {
     fun dispatch(command: ScannerCommand) {
         when (command.type) {
@@ -77,8 +80,15 @@ class SourceCodeWorker(override val command: ScannerCommand) : Worker<SourceCode
         slotHub.register(command.slots)
     }
 
+    /**
+     * 该代码是一个Kotlin协程任务，用于分析源代码并生成数据结构。首先，
+     * 它根据语言获取分析器并生成AST（抽象语法树），
+     * 然后分别分析Protobuf和Thrift文件，将结果合并到AST中。
+     * 接着，保存AST并处理特征分析，最后完成分析任务。
+     */
     override fun run(): Unit = runBlocking {
         logger.info("Start analysing source code: ${context.language}, ${context.path}")
+        // 获取分析器
         val languageAnalyser = getOrInstall<SourceCodeAnalyser>(context.language)
         val ast: MutableList<CodeDataStruct> =
             (languageAnalyser.analyse(null) as? List<CodeDataStruct>)?.toMutableList() ?: mutableListOf()
@@ -102,7 +112,9 @@ class SourceCodeWorker(override val command: ScannerCommand) : Worker<SourceCode
         logger.info("build CodeDataStructs: ${ast.size}")
 
         slotHub.consumer(ast)
-
+        // 该代码对context.features中的每个元素进行异步处理，尝试获取或安装SourceCodeAnalyser，
+        // 分析AST并消费数据，若出错则记录错误日志。  it 是 context.features 列表中的当前元素，表示一个需要分析的特征（feature）。
+        // getOrInstall<SourceCodeAnalyser>(it) 会根据该特征获取或安装对应的 SourceCodeAnalyser 实例。
         context.features.asyncMap {
             try {
                 val featureAnalyser = getOrInstall<SourceCodeAnalyser>(it)
